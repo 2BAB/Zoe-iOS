@@ -1,0 +1,160 @@
+{
+  "allowedHosts" : [
+    "news.ycombinator.com"
+  ],
+  "budget" : {
+    "maxModelCalls" : 60,
+    "maxSeconds" : 600,
+    "maxSteps" : 500
+  },
+  "goal" : "Find up to three Apple stories on the Hacker News front page, and judge whether the first three comments on each are optimistic, pessimistic, or neutral.",
+  "id" : "F118E04E-7C86-4EE5-8D92-01F9053B0A20",
+  "output" : "finalResults",
+  "parameters" : {
+
+  },
+  "startURL" : "https://news.ycombinator.com/",
+  "steps" : [
+    {
+      "read" : {
+        "inputs" : {
+
+        },
+        "output" : "stories",
+        "script" : "const rows = document.querySelectorAll('tr.athing');\nif (!rows || rows.length === 0) {\n  throw new Error('Missing expected Hacker News front page stories');\n}\nconst items = [];\nfor (const tr of rows) {\n  const id = tr.id;\n  const titleEl = tr.querySelector('.titleline > a');\n  const title = titleEl ? titleEl.innerText.trim() : '';\n  const url = titleEl ? titleEl.href : '';\n  const subtextTr = tr.nextElementSibling;\n  const subtext = subtextTr ? subtextTr.querySelector('.subtext') : null;\n  const commentsA = subtext ? subtext.querySelector('a[href*=\"item?id=\"]:last-child') : null;\n  const commentsUrl = (commentsA && commentsA.getAttribute('href') && commentsA.getAttribute('href').includes('item?id='))\n    ? commentsA.href\n    : `https://news.ycombinator.com/item?id=${id}`;\n  items.push({ id, title, url, commentsUrl });\n}\nreturn items;"
+      }
+    },
+    {
+      "semantic" : {
+        "input" : {
+          "path" : "stories"
+        },
+        "output" : "appleStories",
+        "task" : {
+          "fields" : [
+            "title"
+          ],
+          "instruction" : "Select only stories specifically about Apple Inc. (the technology company, its hardware, software, services, or history, such as iPhone, Mac, iPad, iOS, macOS, Apple Card, Steve Jobs). Do not select stories about apple the fruit, agriculture, or other unrelated tech topics. Return an empty list if no stories are about Apple Inc.",
+          "kind" : "select",
+          "labels" : [
+
+          ],
+          "limit" : 3
+        }
+      }
+    },
+    {
+      "forEach" : {
+        "collect" : {
+          "path" : "extractedStory"
+        },
+        "input" : {
+          "path" : "appleStories"
+        },
+        "item" : "story",
+        "limit" : 3,
+        "output" : "storiesWithComments",
+        "steps" : [
+          {
+            "act" : {
+              "action" : {
+                "kind" : "navigate",
+                "url" : {
+                  "path" : "story.commentsUrl"
+                }
+              }
+            }
+          },
+          {
+            "read" : {
+              "inputs" : {
+                "story" : {
+                  "path" : "story"
+                }
+              },
+              "output" : "extractedStory",
+              "script" : "const hasExpectedStructure = Boolean(\n  document.querySelector('.fatitem') ||\n  document.querySelector('.comment-tree') ||\n  document.querySelector('tr.athing')\n);\nif (!hasExpectedStructure) {\n  throw new Error(`Expected HN comment page structure not found for item ${input.story.id}`);\n}\nconst commentRows = Array.from(document.querySelectorAll('tr.athing.comtr'));\nconst topLevel = [];\nfor (const tr of commentRows) {\n  const indentImg = tr.querySelector('td.ind img');\n  const indentWidth = indentImg ? parseInt(indentImg.getAttribute('width') || '0', 10) : 0;\n  if (indentWidth !== 0) continue;\n\n  if (tr.classList.contains('noshow') || tr.classList.contains('coll') || tr.classList.contains('dead')) continue;\n  if (tr.style.display === 'none') continue;\n\n  const commtextEl = tr.querySelector('.commtext');\n  if (!commtextEl) continue;\n  if (commtextEl.classList.contains('dead')) continue;\n\n  const fullText = (commtextEl.innerText || commtextEl.textContent || '').trim();\n  if (!fullText) continue;\n  const lower = fullText.toLowerCase();\n  if (lower === '[deleted]' || lower === '[dead]' || lower === '[flagged]') continue;\n\n  const id = tr.id;\n  const permalinkA = tr.querySelector('.age a');\n  let permalink = '';\n  if (permalinkA && permalinkA.getAttribute('href')) {\n    const href = permalinkA.getAttribute('href');\n    permalink = href.startsWith('http') ? href : `https://news.ycombinator.com/${href.replace(/^\\//, '')}`;\n  } else {\n    permalink = `https://news.ycombinator.com/item?id=${id}`;\n  }\n\n  const maxChars = 1000;\n  const usedExcerpt = fullText.length > maxChars;\n  const textForModel = usedExcerpt ? fullText.slice(0, maxChars) + '...' : fullText;\n\n  topLevel.push({\n    permalink,\n    fullText,\n    textForModel,\n    usedExcerpt\n  });\n  if (topLevel.length === 3) break;\n}\nreturn {\n  storyId: input.story.id,\n  storyTitle: input.story.title,\n  storyUrl: input.story.url,\n  commentsUrl: input.story.commentsUrl,\n  comments: topLevel\n};"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "read" : {
+        "inputs" : {
+          "storiesWithComments" : {
+            "path" : "storiesWithComments"
+          }
+        },
+        "output" : "allComments",
+        "script" : "const flat = [];\nconst stories = input.storiesWithComments || [];\nfor (let sIdx = 0; sIdx < stories.length; sIdx++) {\n  const story = stories[sIdx];\n  const comments = story.comments || [];\n  for (let cIdx = 0; cIdx < comments.length; cIdx++) {\n    const c = comments[cIdx];\n    flat.push({\n      storyIndex: sIdx,\n      commentIndex: cIdx,\n      permalink: c.permalink,\n      fullText: c.fullText,\n      textForModel: c.textForModel,\n      usedExcerpt: c.usedExcerpt\n    });\n  }\n}\nreturn flat;"
+      }
+    },
+    {
+      "forEach" : {
+        "collect" : {
+          "path" : "judgedComment"
+        },
+        "input" : {
+          "path" : "allComments"
+        },
+        "item" : "commentItem",
+        "limit" : 9,
+        "output" : "allJudgedComments",
+        "steps" : [
+          {
+            "semantic" : {
+              "input" : {
+                "path" : "commentItem.textForModel"
+              },
+              "output" : "sentiment",
+              "task" : {
+                "fields" : [
+
+                ],
+                "instruction" : "Judge whether this comment expresses an optimistic, pessimistic, or neutral sentiment.",
+                "kind" : "classify",
+                "labels" : [
+                  "optimistic",
+                  "pessimistic",
+                  "neutral"
+                ],
+                "limit" : 10
+              }
+            }
+          },
+          {
+            "read" : {
+              "inputs" : {
+                "commentItem" : {
+                  "path" : "commentItem"
+                },
+                "sentiment" : {
+                  "path" : "sentiment"
+                }
+              },
+              "output" : "judgedComment",
+              "script" : "return {\n  storyIndex: input.commentItem.storyIndex,\n  commentIndex: input.commentItem.commentIndex,\n  permalink: input.commentItem.permalink,\n  fullText: input.commentItem.fullText,\n  judgment: input.sentiment,\n  judgmentUsedExcerpt: input.commentItem.usedExcerpt\n};"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "read" : {
+        "inputs" : {
+          "allJudgedComments" : {
+            "path" : "allJudgedComments"
+          },
+          "storiesWithComments" : {
+            "path" : "storiesWithComments"
+          }
+        },
+        "output" : "finalResults",
+        "script" : "const stories = input.storiesWithComments || [];\nconst judged = input.allJudgedComments || [];\nreturn stories.map((story, sIdx) => {\n  const storyComments = judged\n    .filter(c => c.storyIndex === sIdx)\n    .sort((a, b) => a.commentIndex - b.commentIndex)\n    .map(c => ({\n      permalink: c.permalink,\n      fullText: c.fullText,\n      judgment: c.judgment,\n      judgmentUsedExcerpt: c.judgmentUsedExcerpt\n    }));\n  return {\n    title: story.storyTitle,\n    url: story.storyUrl,\n    commentsUrl: story.commentsUrl,\n    comments: storyComments\n  };\n});"
+      }
+    }
+  ],
+  "title" : "Hacker News Apple Stories Comment Sentiment",
+  "version" : 2
+}

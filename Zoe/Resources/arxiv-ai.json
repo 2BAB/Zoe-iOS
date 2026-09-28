@@ -1,0 +1,145 @@
+{
+  "allowedHosts" : [
+    "arxiv.org"
+  ],
+  "budget" : {
+    "maxModelCalls" : 60,
+    "maxSeconds" : 600,
+    "maxSteps" : 500
+  },
+  "goal" : "From the first ten recent arXiv cs.AI papers, find up to three about language models, reasoning, on-device inference or neural architectures, and summarize their main contributions.",
+  "id" : "A2AC4071-12AE-4112-B52D-5ED71B2912C0",
+  "output" : "result",
+  "parameters" : {
+
+  },
+  "startURL" : "https://arxiv.org/list/cs.AI/recent",
+  "steps" : [
+    {
+      "read" : {
+        "inputs" : {
+
+        },
+        "output" : "papers",
+        "script" : "const dl = document.querySelector('#articles, dl'); if (!dl) throw new Error('Articles list element not found'); const dts = Array.from(dl.querySelectorAll('dt')).slice(0, 10); const dds = Array.from(dl.querySelectorAll('dd')).slice(0, 10); if (dts.length === 0) throw new Error('No submissions found on the page'); return dts.map((dt, i) => { const dd = dds[i]; const absLink = dt.querySelector('a[title=\"Abstract\"], a[href*=\"/abs/\"]'); const pdfLink = dt.querySelector('a[title=\"Download PDF\"], a[href*=\"/pdf/\"]'); const titleEl = dd ? dd.querySelector('.list-title') : null; const authorsEl = dd ? dd.querySelector('.list-authors') : null; const paperId = absLink ? absLink.textContent.trim() : ''; const title = titleEl ? titleEl.textContent.replace(/^Title:\\s*/i, '').replace(/\\s+/g, ' ').trim() : ''; const authors = authorsEl ? authorsEl.textContent.replace(/^Authors:\\s*/i, '').replace(/\\s+/g, ' ').trim() : ''; const absUrl = absLink ? absLink.href : ''; const pdfUrl = pdfLink ? pdfLink.href : ''; return { id: i, paperId, title, authors, absUrl, pdfUrl }; });"
+      }
+    },
+    {
+      "semantic" : {
+        "input" : {
+          "path" : "papers"
+        },
+        "output" : "selectedPapers",
+        "task" : {
+          "fields" : [
+            "title"
+          ],
+          "instruction" : "Select up to 3 papers about language models, reasoning, on-device inference, or neural architectures.",
+          "kind" : "select",
+          "labels" : [
+
+          ],
+          "limit" : 3
+        }
+      }
+    },
+    {
+      "forEach" : {
+        "collect" : {
+          "path" : "paperResult"
+        },
+        "input" : {
+          "path" : "selectedPapers"
+        },
+        "item" : "paper",
+        "limit" : 3,
+        "output" : "summarizedPapers",
+        "steps" : [
+          {
+            "read" : {
+              "inputs" : {
+
+              },
+              "output" : "delay",
+              "script" : "return new Promise(resolve => setTimeout(() => resolve(true), 15000));"
+            }
+          },
+          {
+            "act" : {
+              "action" : {
+                "kind" : "navigate",
+                "url" : {
+                  "path" : "paper.absUrl"
+                }
+              }
+            }
+          },
+          {
+            "read" : {
+              "inputs" : {
+
+              },
+              "output" : "abstractText",
+              "script" : "const absEl = document.querySelector('blockquote.abstract'); if (!absEl) throw new Error('Abstract blockquote not found'); return absEl.textContent.replace(/^\\s*Abstract:\\s*/i, '').trim();"
+            }
+          },
+          {
+            "semantic" : {
+              "input" : {
+                "path" : "abstractText"
+              },
+              "output" : "summary",
+              "task" : {
+                "fields" : [
+
+                ],
+                "instruction" : "Summarize the main contribution in one or two sentences grounded only in the provided abstract.",
+                "kind" : "summarize",
+                "labels" : [
+
+                ],
+                "limit" : 2
+              }
+            }
+          },
+          {
+            "read" : {
+              "inputs" : {
+                "abstract" : {
+                  "path" : "abstractText"
+                },
+                "paper" : {
+                  "path" : "paper"
+                },
+                "summary" : {
+                  "path" : "summary"
+                }
+              },
+              "output" : "paperResult",
+              "script" : "return { paperId: input.paper.paperId, title: input.paper.title, authors: input.paper.authors, abstractUrl: input.paper.absUrl, pdfUrl: input.paper.pdfUrl, abstract: input.abstract, summary: input.summary };"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "read" : {
+        "inputs" : {
+          "extractedPapers" : {
+            "path" : "papers"
+          },
+          "selectedPapers" : {
+            "path" : "selectedPapers"
+          },
+          "summarizedPapers" : {
+            "path" : "summarizedPapers"
+          }
+        },
+        "output" : "result",
+        "script" : "return { scope: 'At most the first 10 papers in page order from recent arXiv cs.AI submissions (https://arxiv.org/list/cs.AI/recent)', inspectedCount: input.extractedPapers.length, selectedCount: input.selectedPapers.length, summarizedCount: input.summarizedPapers.length, successfulSummaryCount: input.summarizedPapers.length, papers: input.summarizedPapers };"
+      }
+    }
+  ],
+  "title" : "Select and Summarize Recent arXiv cs.AI Papers",
+  "version" : 2
+}

@@ -1,0 +1,126 @@
+{
+  "allowedHosts" : [
+    "www.swift.org"
+  ],
+  "budget" : {
+    "maxModelCalls" : 60,
+    "maxSeconds" : 600,
+    "maxSteps" : 500
+  },
+  "goal" : "On the Swift.org Swift Evolution page, inspect the currently displayed Active Review proposals only (at most the first eight in page order). Keep up to four relating to concurrency, macros, type system, or performance. Preserve exact SE number, title, status, authors, and proposal URL. Use the local model to classify each selected title into concurrency, macros, types, performance, or unknown. State the inspected-page scope. Test a small representative sample and submit the full workflow for verification promptly.",
+  "id" : "BF6C788E-AA21-4627-BF5F-6CC7A9B9CD08",
+  "output" : "result",
+  "parameters" : {
+
+  },
+  "startURL" : "https://www.swift.org/swift-evolution/",
+  "steps" : [
+    {
+      "act" : {
+        "action" : {
+          "kind" : "wait",
+          "wait" : {
+            "script" : "return Boolean(document.querySelector('ul.proposals-list .proposal'));",
+            "timeoutSeconds" : 15
+          }
+        }
+      }
+    },
+    {
+      "read" : {
+        "inputs" : {
+
+        },
+        "output" : "activeProposals",
+        "script" : "const list = document.querySelector('ul.proposals-list');\nif (!list) throw new Error('proposals list container missing');\nconst proposals = Array.from(list.querySelectorAll('.proposal'));\nconst active = proposals.filter(p => {\n  const pill = p.querySelector('.status-pill');\n  return pill && pill.textContent.trim().toLowerCase().includes('active review');\n}).slice(0, 8);\nreturn active.map(p => {\n  const idEl = p.querySelector('.proposal-id');\n  const titleEl = p.querySelector('.proposal-title');\n  const pill = p.querySelector('.status-pill');\n  const authorsEl = p.querySelector('.authors .proposal-detail-value, .author .proposal-detail-value, [class*=\"author\"] .proposal-detail-value');\n  return {\n    id: idEl ? idEl.textContent.trim() : '',\n    title: titleEl ? titleEl.textContent.trim() : '',\n    status: pill ? pill.textContent.trim() : '',\n    authors: authorsEl ? authorsEl.textContent.trim() : '',\n    url: titleEl ? titleEl.href : ''\n  };\n});"
+      }
+    },
+    {
+      "semantic" : {
+        "input" : {
+          "path" : "activeProposals"
+        },
+        "output" : "selectedProposals",
+        "task" : {
+          "fields" : [
+            "title"
+          ],
+          "instruction" : "Select proposals relating to concurrency, macros, the type system, or performance.",
+          "kind" : "select",
+          "labels" : [
+
+          ],
+          "limit" : 4
+        }
+      }
+    },
+    {
+      "forEach" : {
+        "collect" : {
+          "path" : "classifiedProposal"
+        },
+        "input" : {
+          "path" : "selectedProposals"
+        },
+        "item" : "item",
+        "limit" : 10,
+        "output" : "classifiedProposals",
+        "steps" : [
+          {
+            "semantic" : {
+              "input" : {
+                "path" : "item.title"
+              },
+              "output" : "classification",
+              "task" : {
+                "fields" : [
+
+                ],
+                "instruction" : "Classify this proposal topic. Concurrency: Task, async, actor, threads. Types: data types, structs, protocols, generics, spans. Performance: speed, caching, optimization. Macros: macro syntax. Otherwise unknown.",
+                "kind" : "classify",
+                "labels" : [
+                  "concurrency",
+                  "macros",
+                  "types",
+                  "performance",
+                  "unknown"
+                ],
+                "limit" : 10
+              }
+            }
+          },
+          {
+            "read" : {
+              "inputs" : {
+                "classification" : {
+                  "path" : "classification"
+                },
+                "item" : {
+                  "path" : "item"
+                }
+              },
+              "output" : "classifiedProposal",
+              "script" : "return {\n  seNumber: input.item.id,\n  id: input.item.id,\n  title: input.item.title,\n  status: input.item.status,\n  authors: input.item.authors,\n  proposalUrl: input.item.url,\n  url: input.item.url,\n  classification: input.classification\n};"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "read" : {
+        "inputs" : {
+          "activeProposals" : {
+            "path" : "activeProposals"
+          },
+          "classifiedProposals" : {
+            "path" : "classifiedProposals"
+          }
+        },
+        "output" : "result",
+        "script" : "return {\n  inspectedScope: 'Inspected currently displayed Active Review proposals on https://www.swift.org/swift-evolution/ (first 8 in page order)',\n  inspectedActiveReviewCount: input.activeProposals.length,\n  selectedCount: input.classifiedProposals.length,\n  selectedProposals: input.classifiedProposals\n};"
+      }
+    }
+  ],
+  "title" : "Swift Evolution Active Review Proposals Filter and Classifier",
+  "version" : 2
+}

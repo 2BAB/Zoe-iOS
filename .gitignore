@@ -1,0 +1,8 @@
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.DS_Store
+.build/
+.env
+.env.*
+!.env.example
