@@ -4,11 +4,15 @@ A small sample that uses simple cloud–device coordination to provide low-cost 
 
 A cloud model builds and tests a workflow. After you save it, later runs use WebKit and Apple Foundation Models on the device, reducing repeated cloud-model calls.
 
+Supports iOS, iPadOS and macOS, with adaptive layouts for iPhone Duo.
+
 ## Requirements
 
-- Xcode 27 and iOS 27 / macOS 27.
+- Xcode 27 and iOS 27 / iPadOS 27 / macOS 27.
 - An Apple Intelligence-capable device with Apple Intelligence enabled and the local model ready.
 - A Gemini API key or Apple's Private Cloud Compute entitlement to build new workflows. Bundled samples can run without a cloud API key.
+
+For iPhone Duo, build with Xcode 27.1 or later (iOS 27.1 SDK or later) to enable edge-to-edge layout and adaptive vertical toolbars. Running an older-SDK build on iOS 27.1 does not enable these layouts. See Apple's [Prepare your app for iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111461/).
 
 ## Run
 
@@ -25,6 +29,16 @@ The bundled samples were generated and tested by the cloud builder:
 Saved workflows can also run through Shortcuts. Background and locked-device execution are experimental.
 
 To create a workflow, enter a start URL and a short goal, choose a builder, and select **Build Workflow**. For Gemini, paste your API key into the app or set `GEMINI_API_KEY`; the key stays in memory. Review the generated workflow before saving.
+
+## Screenshots
+
+Workflow review and on-device results on the iPhone Duo simulator (iOS 27.1), with layouts for the unfolded inner display and folded outer display.
+
+![Reviewing the Swift Evolution workflow on iPhone Duo](docs/images/iphone-duo-workflow.png)
+
+![Swift Evolution results on iPhone Duo](docs/images/iphone-duo-results.png)
+
+![Workflow review on the folded iPhone Duo outer display](docs/images/iphone-duo-closed.png)
 
 ## How it works
 
