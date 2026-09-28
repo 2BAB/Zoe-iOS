@@ -162,7 +162,7 @@ struct RuntimeContractTests {
     }
 
     @Test func selectionKeysKeepDuplicatesAndQuotedTextDistinct() throws {
-        let title = "Quoted \"title\"\n苹果 😀"
+        let title = "Quoted \"title\"\nApple (café) 😀"
         let task = SemanticTask(kind: .select, instruction: "Match the quoted text", fields: ["title"])
         let item = JSONValue.object(["title": .string(title), "url": .string("https://example.com")])
         let batch = try OnDeviceModel.selectionBatch(task, items: [item, item])

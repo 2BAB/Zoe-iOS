@@ -132,9 +132,9 @@ struct ZoeSmoke {
                     ("I love this improvement. Apple's future looks bright!", "optimistic"),
                     ("This is a disaster. I expect Apple's quality to keep getting worse.", "pessimistic"),
                     ("The article says the update will be released on Tuesday.", "neutral"),
-                    ("这次改进很棒，我对苹果的未来非常乐观。", "optimistic"),
-                    ("又是倒退。我对苹果接下来的产品很悲观。", "pessimistic"),
-                    ("发布会定于周二上午十点开始。", "neutral")
+                    ("Fantastic update, this will completely transform the developer experience.", "optimistic"),
+                    ("Another step backward. The performance degradation is unacceptable.", "pessimistic"),
+                    ("The keynote is scheduled to start at 10:00 AM on Tuesday.", "neutral")
                 ]
                 var records: [[String: String]] = []
                 for (index, item) in cases.enumerated() {
