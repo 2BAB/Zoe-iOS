@@ -4,9 +4,16 @@ import WebKit
 struct ContentView: View {
     @Bindable var model: AppModel
     @State private var showsPage = false
+    @State private var selectedPreset: VerifiedPreset?
     /// In compact width (iPhone, or iPhone Duo folded) the split view collapses into a stack.
     /// Actions that don't change the list selection must still bring the detail column forward.
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
+
+    private enum SidebarItem: Hashable {
+        case newWorkflow
+        case preset(VerifiedPreset)
+        case workflow(Workflow.ID)
+    }
 
     var body: some View {
         NavigationSplitView(preferredCompactColumn: $compactColumn) {
@@ -17,8 +24,20 @@ struct ContentView: View {
                 if let draft = model.draft {
                     workflowSection(draft, isDraft: true)
                 } else if let workflow = model.selectedWorkflow {
-                    workflowSection(workflow, isDraft: false)
+                    Section {
+                        Button("Run on Device", systemImage: "play.fill") { model.runSelected() }
+                            .buttonStyle(.borderedProminent)
+                            .labelStyle(.titleAndIcon)
+                            .disabled(model.isBusy)
+                    }
                     if let result = model.results[workflow.id] { ResultSection(result: result) }
+                    else {
+                        Section("Results") {
+                            Text("No runs yet. Run this workflow to see its results.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    workflowSection(workflow, isDraft: false)
                 } else {
                     goalSection
                 }
@@ -36,30 +55,65 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $model.selectedID) {
+        List(selection: sidebarSelection) {
             Section {
-                Button("New Workflow", systemImage: "plus") {
-                    model.draft = nil
-                    model.selectedID = nil
-                    model.goal = ""
-                    compactColumn = .detail
-                }
+                Label("New Workflow", systemImage: "plus")
+                    .listItemTint(.red)
+                    .tag(SidebarItem.newWorkflow)
+            }
+            Section("Samples") {
                 ForEach(VerifiedPreset.allCases) { preset in
-                    Button(preset.title, systemImage: preset.symbol) { model.loadSample(preset) }
+                    Label(preset.title, systemImage: preset.symbol)
+                        .listItemTint(.red)
+                        .tag(SidebarItem.preset(preset))
                 }
             }
             Section("Saved") {
                 ForEach(model.workflows) { workflow in
-                    Text(workflow.title).lineLimit(2).tag(workflow.id)
+                    Label(workflow.title, systemImage: "doc.text")
+                        .listItemTint(.red)
+                        .lineLimit(2)
+                        .tag(SidebarItem.workflow(workflow.id))
                         .contextMenu {
                             Button("Delete", systemImage: "trash", role: .destructive) { model.delete(workflow) }
                         }
                 }
             }
         }
+        .listStyle(.sidebar)
+        .labelStyle(.titleAndIcon)
+        .tint(.red)
         .disabled(model.isBusy)
         .navigationTitle("Zoe")
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+    }
+
+    // One native list selection covers creation, samples and saved workflows.
+    private var sidebarSelection: Binding<SidebarItem?> {
+        Binding {
+            if let id = model.selectedID { return .workflow(id) }
+            if let preset = selectedPreset, model.draft != nil { return .preset(preset) }
+            return .newWorkflow
+        } set: { item in
+            guard let item else { return }
+            switch item {
+            case .newWorkflow:
+                selectedPreset = nil
+                model.draft = nil
+                model.selectedID = nil
+                model.goal = ""
+                model.status = "Describe what Zoe should find."
+            case .preset(let preset):
+                selectedPreset = preset
+                model.loadSample(preset)
+            case .workflow(let id):
+                selectedPreset = nil
+                model.draft = nil
+                model.selectedID = id
+                model.status = model.results[id].map { AppModel.statusText(for: $0) } ?? "Ready to run on device."
+            }
+            compactColumn = .detail
+        }
     }
 
     private var statusSection: some View {
@@ -113,28 +167,16 @@ struct ContentView: View {
 
     private func workflowSection(_ workflow: Workflow, isDraft: Bool) -> some View {
         Section {
-            Text(workflow.goal)
-            Link(workflow.startURL.absoluteString, destination: workflow.startURL)
-            Text("Allowed page hosts: \(workflow.hosts.sorted().joined(separator: ", "))")
-                .font(.caption).foregroundStyle(.secondary)
-            ForEach(Array(workflow.steps.enumerated()), id: \.offset) { index, step in
-                DisclosureGroup("\(index + 1). \(step.title)") {
-                    Text(Self.detail(of: step))
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                }
-            }
             if isDraft {
+                workflowDetails(workflow)
                 Button("Save Workflow", systemImage: "checkmark.circle.fill") { model.saveDraft() }
                     .buttonStyle(.borderedProminent)
                     .labelStyle(.titleAndIcon)
             } else {
-                Button("Run on Device", systemImage: "play.fill") { model.runSelected() }
-                    .buttonStyle(.borderedProminent)
-                    .labelStyle(.titleAndIcon)
+                DisclosureGroup("Workflow details") { workflowDetails(workflow) }
             }
         } header: {
-            Text(isDraft ? "Review before saving" : "Workflow")
+            if isDraft { Text("Review before saving") }
         } footer: {
             if isDraft {
                 Text("Saving lets Zoe load these pages, run these scripts, and process the text on device.")
@@ -143,10 +185,28 @@ struct ContentView: View {
         .disabled(model.isBusy)
     }
 
+    private func workflowDetails(_ workflow: Workflow) -> some View {
+        Group {
+            Text(workflow.goal)
+            Link(workflow.startURL.absoluteString, destination: workflow.startURL)
+            Text("Allowed page hosts: \(workflow.hosts.sorted().joined(separator: ", "))")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(workflow.steps.enumerated()), id: \.offset) { index, step in
+                DisclosureGroup("\(index + 1). \(step.title)") {
+                    Text(step.detail)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+
     private var logSection: some View {
-        Section("Log") {
-            ForEach(Array(model.log.enumerated()), id: \.offset) { _, line in
-                Text(line).font(.caption.monospaced()).foregroundStyle(.secondary)
+        Section {
+            DisclosureGroup("Run log") {
+                ForEach(Array(model.log.enumerated()), id: \.offset) { _, line in
+                    Text(line).font(.caption.monospaced()).foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -167,9 +227,6 @@ struct ContentView: View {
         #endif
     }
 
-    private static func detail(of step: Step) -> String {
-        step.detail
-    }
 }
 
 private struct ResultSection: View {
@@ -177,9 +234,15 @@ private struct ResultSection: View {
 
     var body: some View {
         Section {
-            Text("Status: \(result.status.rawValue)").font(.headline)
+            Text(AppModel.statusText(for: result)).font(.headline)
             ForEach(Array(result.notes.enumerated()), id: \.offset) { _, note in Text(note).foregroundStyle(.orange) }
-            JSONResultView(value: result.output)
+            if result.output == .array([]) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("0 records returned", systemImage: "tray")
+                    Text("This run returned no records. This does not confirm that no matching content exists.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            } else { JSONResultView(value: result.output) }
             if !result.log.isEmpty {
                 DisclosureGroup("Run log") {
                     ForEach(Array(result.log.enumerated()), id: \.offset) { _, line in
@@ -195,7 +258,7 @@ private struct ResultSection: View {
             ForEach(result.sources, id: \.self) { url in Link(url.absoluteString, destination: url).font(.caption) }
             ShareLink(item: AppModel.text(for: result))
         } header: {
-            Text("Last run · \(result.date.formatted(date: .abbreviated, time: .shortened))")
+            Text("Results · \(result.date.formatted(date: .abbreviated, time: .shortened))")
         }
     }
 }
@@ -215,7 +278,7 @@ private struct JSONResultView: View {
                 }
             }
         case .array(let records):
-            if records.isEmpty { Text("No records in this query scope.").foregroundStyle(.secondary) }
+            if records.isEmpty { Text("No items returned.").foregroundStyle(.secondary) }
             else {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(records.enumerated()), id: \.offset) { index, record in

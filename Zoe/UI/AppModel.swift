@@ -11,9 +11,9 @@ enum VerifiedPreset: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .hackerNews: "Try Hacker News"
-        case .swiftEvolution: "Try Swift Evolution"
-        case .arxivAI: "Try arXiv Papers"
+        case .hackerNews: "Hacker News"
+        case .swiftEvolution: "Swift Evolution"
+        case .arxivAI: "arXiv Papers"
         }
     }
     var symbol: String {
@@ -176,7 +176,7 @@ final class AppModel {
         var updated = results; updated[workflow.id] = result
         try persist(workflows: workflows, results: updated)
         results = updated
-        status = "Run: \(result.status.rawValue)."
+        status = Self.statusText(for: result)
         return result
     }
 
@@ -227,6 +227,18 @@ final class AppModel {
     private func persist(workflows: [Workflow], results: [UUID: RunResult]) throws {
         guard storageReady else { throw ZoeError("Resolve the saved-data error before overwriting storage.") }
         try store.save(.init(workflows: workflows, results: results))
+    }
+
+    static func statusText(for result: RunResult) -> String {
+        switch result.status {
+        case .complete:
+            if let records = result.output.array { return "Run finished — \(records.count) records returned." }
+            return "Run finished."
+        case .partial: return "Run partially completed. Check the notes."
+        case .failed: return "Run failed. Check the notes."
+        case .needsUser: return "Run needs your attention. Check the notes."
+        case .needsRebuild: return "Workflow needs rebuilding. Check the notes."
+        }
     }
 
     static func text(for result: RunResult) -> String {
