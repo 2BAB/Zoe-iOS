@@ -156,7 +156,15 @@ struct OnDeviceModel: SemanticProcessing {
     func packSelectionBatch(_ task: SemanticTask, items: ArraySlice<JSONValue>) async throws -> SelectionBatch {
         guard !items.isEmpty else { throw ZoeError("Cannot pack an empty selection batch.") }
         let valid = try Self.selectionPrefix(task, items: items)
-        var lower = 1, upper = valid.count
+
+        // Check the largest valid prefix first (up to ten records).
+        // Search smaller prefixes only if the full batch exceeds the input or total context budget.
+        let fullBatch = try await prepareSelectionBatch(task, items: valid)
+        if try await fits(fullBatch.request) {
+            return fullBatch
+        }
+
+        var lower = 1, upper = valid.count - 1
         var best: SelectionBatch?
         while lower <= upper {
             try Task.checkCancellation()
