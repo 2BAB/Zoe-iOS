@@ -44,6 +44,81 @@ Workflow review and on-device results on the iPhone Duo simulator (iOS 27.1), wi
 
 The cloud builder inspects pages, writes JavaScript and short local-model instructions, and tests the workflow. During replay, Swift coordinates page navigation and model calls; JavaScript handles page interaction and extraction.
 
+```mermaid
+flowchart LR
+    subgraph Build["1. Build and verify"]
+        LLM["Cloud model<br/>Gemini / PCC"]
+        Tools["On-device build tools<br/>Page inspection, JavaScript and local-model trials"]
+        LLM <--> Tools
+    end
+
+    Saved[("Saved workflow JSON<br/>Steps, JavaScript and local-model instructions")]
+    Tools -->|Verify, then user review and save| Saved
+
+    subgraph Replay["2. Reuse on device"]
+        Runner["WorkflowRunner<br/>Swift coordinator"]
+        WebKit["WebKit browser<br/>Page interaction, extraction and navigation"]
+        AFM["Apple Foundation Models<br/>2K input / 4K total replay budget"]
+        Results["Results and run log"]
+
+        Saved --> Runner
+        Runner <-->|act / read| WebKit
+        Runner <-->|semantic| AFM
+        Runner --> Results
+    end
+```
+
+### Build and verification
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Host as Builder host (on device)
+    participant Builder as Cloud model (Gemini / PCC)
+    participant Runner as WorkflowRunner
+    participant Browser as WebKit browser
+    participant LocalModel as On-device model (AFM)
+
+    User->>Host: Goal and start URL
+    Host->>Browser: Load start page
+    Browser-->>Host: Page ready
+    Host->>Builder: Goal and start URL
+    loop Explore and test as needed
+        Builder->>Host: inspect / read / explore
+        Host->>Browser: Inspect or interact with the page
+        Browser-->>Host: DOM outline / JSON
+        Host-->>Builder: Observation
+        opt Test a local-model task
+            Builder->>Host: testSemantic(taskJSON, inputJSON)
+            Host->>LocalModel: Evaluate task on sample input
+            LocalModel-->>Host: Output and token usage
+            Host-->>Builder: Output, usage and run log
+        end
+    end
+    loop verifyWorkflow, then finish (repair and retry if needed)
+        Builder->>Host: verifyWorkflow(workflowJSON) / finish(summary)
+        Host->>Runner: Run candidate / verified workflow
+        Runner->>Browser: Restart at the start URL
+        Browser-->>Runner: Fresh page ready
+        loop Execute workflow steps in order
+            alt Browser step
+                Runner->>Browser: act / read
+                Browser-->>Runner: Completion / extracted data
+            else Semantic step
+                Runner->>LocalModel: Select / classify / summarize
+                LocalModel-->>Runner: Task output
+            end
+        end
+        Runner-->>Host: Status, output and run log
+        Host-->>Builder: Replay feedback
+    end
+    Builder-->>Host: Closing response
+    Host-->>User: Workflow ready to review and save
+```
+
+Both verification passes rerun the workflow on a fresh page. Partial results may be accepted when individual items fail; the run log retains the reasons. Verification does not guarantee model accuracy.
+
 The local model selects, classifies or summarizes small inputs using independent sessions. Replay limits input to 2K tokens and the total context budget to 4K; selection uses batches of up to ten records. Results retain source links, and skipped items appear in the run log.
 
 Workflows and the latest results are stored locally.
