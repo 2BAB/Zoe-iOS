@@ -1,8 +1,8 @@
 # Zoe
 
-A small sample that uses simple cloud–device coordination to provide low-cost web content subscriptions in simple scenarios.
+A SwiftUI sample for simple, low-cost web content subscriptions using cloud and on-device models.
 
-A cloud model builds and tests a workflow. After you save it, later runs use WebKit and Apple Foundation Models on the device, reducing repeated cloud-model calls.
+A cloud model builds and tests workflows. Once saved, they run locally with WebKit and Apple Foundation Models, avoiding repeated cloud-model calls.
 
 Supports iOS, iPadOS and macOS, with adaptive layouts for iPhone Duo.
 
